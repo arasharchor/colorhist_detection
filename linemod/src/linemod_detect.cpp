@@ -61,7 +61,7 @@ using object_recognition_core::db::ObjectId;
 using object_recognition_core::common::PoseResult;
 using object_recognition_core::db::ObjectDbPtr;
 
-bool info = false;
+bool info = true;
 
 #if LINEMOD_VIZ_IMG
   #include <opencv2/highgui/highgui.hpp>
@@ -73,6 +73,19 @@ bool info = false;
   LinemodPointcloud *pci_real_icpin_model;
   LinemodPointcloud *pci_real_icpin_ref;
 #endif
+
+float getFactor(int value)
+{
+	return (100/value);
+}
+
+float getMax(float newValue, float oldMax)
+{
+	if(oldMax>=newValue)
+		return oldMax;
+	else
+		return newValue;
+}
 
 void drawResponse(const std::vector<cv::linemod::Template>& templates, int num_modalities, cv::Mat& dst, cv::Point offset, int T)
 {
@@ -99,6 +112,98 @@ void drawResponse(const std::vector<cv::linemod::Template>& templates, int num_m
     }
   }
 }
+
+cv::Mat visualizeHistogram(float array[][3], int avgColor[3]) //Falls zu langsam als Referenz übergeben &array[][3]
+{
+	/* Pixel 0 and 1 are not drawn so we need an offset of minimum 2 pixels */
+	const int xDrawingOffset=2;
+	const int yDrawingOffset=10;
+	float maxValue=0.0f;
+	float factor=1.0f;
+	int xSize = 480;
+	int ySize = 200;
+	
+	cv::Point pt1, pt2;
+	
+	// Create mat with alpha channel
+    cv::Mat mat(200+yDrawingOffset, xSize+xDrawingOffset, CV_8UC3);
+	mat = cv::Scalar(255,255,255);
+
+	/* Sucht den größten Wert(Prozentsatz) in den Farben */
+	for(int i=0; i<26; i++)
+	{
+		for(int j=0; j<3; j++)
+		{
+			maxValue=getMax(array[i][j],maxValue);
+		}
+	}
+	
+	/* Umrechnungsfaktor für 100 Pixel Höhe */
+	factor=getFactor(maxValue);
+
+	for(int j=0; j<3; j++)
+	{
+		for(int i=1; i<26; i++)
+		{
+			pt1.x=((i-1)*(ySize/10))+xDrawingOffset;
+			pt1.y=(factor*array[i-1][j])+yDrawingOffset;
+			
+			pt2.x=(i*(ySize/10))+xDrawingOffset;
+			pt2.y=(factor*array[i][j])+yDrawingOffset;
+			
+			/* Draws each individual line
+			 * j=0 red
+			 * j=1 green
+			 * j=2 blue
+			 * Scalar (blue,green,red)
+			*/
+			if(j==0)
+				line(mat,pt1,pt2, cv::Scalar(0,0,255),1,CV_AA,0);
+			if(j==1)
+				line(mat,pt1,pt2, cv::Scalar(0,255,0),1,CV_AA,0);
+			if(j==2)
+				line(mat,pt1,pt2, cv::Scalar(255,0,0),1,CV_AA,0);
+		}
+	}
+	
+	pt1.x = xDrawingOffset;
+	pt1.y = 2;
+	
+	pt2.x = xSize;
+	pt2.y = 2;
+	
+	/* Draw the average color as a 4 pixel thick line over the complete width */
+	cv::line(mat, pt1, pt2, cv::Scalar(avgColor[2],avgColor[1],avgColor[0]), 4, CV_AA, 0);
+	
+	/* Flip the y-Coordinate otherwise it would be up-side-down */
+	cv::flip(mat,mat,0);
+	
+	return mat;
+}
+
+int scale_color(int color_value)
+{	
+	int color;
+	int scaling_factor = 10;
+	
+	if((color_value%scaling_factor) > (scaling_factor/2))
+		color=color_value+(scaling_factor-color_value%scaling_factor);
+	else
+		color=color_value-(color_value%scaling_factor);
+		
+	return color;
+}
+
+int get_avg_color(int newColor, int avgColor, bool start, int counter)
+{
+	avgColor+=newColor;
+	
+	if(!start)
+		return avgColor; 
+	else
+		return round((avgColor/counter));
+}
+
 
 namespace ecto_linemod
 {
@@ -288,22 +393,8 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       if (*visualize_)
 		display = color;
 		
-		/* Check input image */
-		//~ cv::cvtColor(color, color, CV_RGB2BGR);
-		//~ cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
-		//~ cv::imshow( "Display window", color );                   // Show our image inside it.
-		//~ cv::waitKey(0);                                          // Wait for a keystroke in the window
-		
-		
-		//~ for(int i=0; i<color.rows;i++)
-		//~ {
-			//~ for(int j=0; j<color.cols; j++)
-			//~ { 
-				//~ cv::Vec3b colorChannels = color.at<cv::Vec3b>(i,j);
-				//~ std::cout<<"["<<(int)colorChannels[0]<<"|"<<(int)colorChannels[1]<<"|"<<(int)colorChannels[2]<<"]";
-			//~ }
-			//~ std::cout<<std::endl;
-		//~ }
+	  cv::Mat rawColor = color.clone();
+
       sources.push_back(color);
 		
       cv::Mat depth = *depth_;
@@ -332,6 +423,9 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       cv::Mat_<float> K;
       K_depth_->convertTo(K, CV_32F);
       cv::depthTo3d(depth, K, depth_real_ref_raw);
+      
+      float colorhist_array[26][3];
+      cv::Mat colorROI;
 
       int iter = 0;
       //clear the vector of detected objects
@@ -374,46 +468,7 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
 		std::cout<<"depth_real_model_raw: "<<depth_real_model_raw.cols<<" "<<depth_real_model_raw.rows<<std::endl;
 		std::cout<<"depth_real_ref_raw: "<<depth_real_ref_raw.cols<<" "<<depth_real_ref_raw.rows<<std::endl;
 	  }
-	  
-	  /* std::vector<cv::Mat>  colorValues; => colorValues[i].at<float>(0,j); */
-	  /* Werte: X -> links, y -> runter, z -> von Kamera weg */
 
-	  std::cout<<"Rows: "<<color.rows<<std::endl;
-      std::cout<<"Cols: "<<color.cols<<std::endl;
-	  std::cout<<"Type: "<<color.type()<<std::endl; 
-	  std::cout<<"Channels: "<<color.channels()<<std::endl;
-	  std::cout<<"Depth: "<<color.depth()<<std::endl;
-
-      cv::Mat_<cv::Vec3f> colorValuesROI = cv::Mat(depth_real_model_raw.rows, (depth_real_model_raw.cols)*3, CV_32F);
-	  for(int i=0; i<depth_real_model_raw.cols; i++)
-	  {
-		for(int j=0; j<depth_real_model_raw.rows;j++)
-	 	{
-			cv::Vec3f & pixel = depth_real_model_raw.at<cv::Vec3f>(j,i); 
-			if(pixel[0]!=pixel[0]||pixel[1]!=pixel[1]||pixel[2]!=pixel[2])
-			{
-				colorValuesROI.at<cv::Vec3f>(j,i)={0.0f, 0.0f, 0.0f};
-				//~ std::cout<<colorValuesROI.at<cv::Vec3f>(j,i)[0];
-			}
-				
-			else if(pixel[2]<0.2)
-			{	
-				colorValuesROI.at<cv::Vec3f>(j,i)={0.0f,0.0f,0.0f};
-				//~ std::cout<<colorValuesROI.at<cv::Vec3f>(j,i)[0];
-			}
-			
-			else
-			{	
-				/* Hier kommen die ROI-Pixel und Farbwerte hin */
-				colorValuesROI.at<cv::Vec3f>(j,i)={1.0f,1.0f,1.0f} ;
-				//~ std::cout<<colorValuesROI.at<cv::Vec3f>(j,i)[0];
-			}
-		}
-		//~ std::cout<<std::endl;	
-	  }
-	  //~ std::cout<<std::endl;	  
-	  //~ std::cout<<"Match: "<<match.x<<" "<<match.y<<std::endl;
-	  
       //prepare the bounding box for the model and reference point clouds
       cv::Rect_<int> rect_model(0, 0, depth_real_model_raw.cols, depth_real_model_raw.rows);
       //prepare the bounding box for the reference point cloud: add the offset
@@ -490,6 +545,62 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
 			std::cout<<"pts_real_model_temp: "<<i<<" "<<pts_real_model_temp[i]<<std::endl;
 		}
       }
+      
+      /* std::vector<cv::Mat>  colorValues; => colorValues[i].at<float>(0,j); */
+	  /* Werte: X -> links, y -> runter, z -> von Kamera weg */
+
+      for(int i=0; i<26; i++)
+	  {
+	    for(int j=0; j<3; j++)
+		{
+			colorhist_array[i][j]=0;
+		}
+	  }
+      
+      /* Visualize the ROI */
+	  colorROI = rawColor(cv::Rect(match.x, match.y, rect_model.width, rect_model.height));
+	  int counter = 0;
+	  int avgColor[3] = {0,0,0};
+	  
+	  for(int i=0; i<colorROI.cols; i++)
+	  {
+		for(int j=0; j<colorROI.rows;j++)
+	 	{
+			cv::Vec3f & depthPixel = depth_real_model_raw.at<cv::Vec3f>(j,i); 
+			
+			if(depthPixel[0]!=depthPixel[0]||depthPixel[1]!=depthPixel[1]||depthPixel[2]!=depthPixel[2]||depthPixel[2]<0.2);
+			else
+			{	
+				counter++;
+				cv::Vec3b colorPixel = colorROI.at<cv::Vec3b>(cv::Point(i,j)); 
+				/* Color values between 0 - 255 are normalized in steps of 10
+				 * This values from 0 - 250 get divided by 10 to get 26 steps
+				 */
+				
+				std::cout<<(int)colorPixel[0]<<" "<<(int)colorPixel[1]<<" "<<(int)colorPixel[2]<<std::endl;
+				
+				avgColor[0]=get_avg_color(colorPixel[0], avgColor[0], false, counter);
+				avgColor[1]=get_avg_color(colorPixel[1], avgColor[1], false, counter);
+				avgColor[2]=get_avg_color(colorPixel[2], avgColor[2], false, counter);
+				 
+				colorhist_array[(int)(scale_color(colorPixel[0])/10)][0]++;
+			    colorhist_array[(int)(scale_color(colorPixel[1])/10)][1]++;
+			    colorhist_array[(int)(scale_color(colorPixel[2])/10)][2]++;	
+			}
+		}	
+	  } 
+	  
+	  avgColor[0]=get_avg_color(0, avgColor[0], true, counter);
+	  avgColor[1]=get_avg_color(0, avgColor[1], true, counter);
+	  avgColor[2]=get_avg_color(0, avgColor[2], true, counter);	
+	  
+	  std::cout<<avgColor[0]<<" "<<avgColor[1]<<" "<<avgColor[2]<<std::endl;
+	
+      cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
+	  cv::imshow( "Display window", colorROI );                // Show our image inside it.
+	  cv::waitKey(0);
+      /* ----------------- */
+      
       //keep the object match
       objs_.push_back(object_recognition_core::db::ObjData(pts_real_ref_temp, pts_real_model_temp, match.class_id, match.similarity, icp_dist, px_ratio_match_inliers, R_real_icp, T_crop));
       ++iter;
@@ -512,14 +623,13 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
 			std::cout<<"pts_model.1: "<<o_match->pts_model[1]<<std::endl;
 			std::cout<<"pts_ref.1: "<<o_match->pts_ref[1]<<std::endl;
         }
+        
         //find the best object match among near objects
         std::vector <object_recognition_core::db::ObjData>::iterator it_o2 = it_o;
         ++it_o2;
-        
-        if(info)
-			std::cout<<"it_o2-t: "<<it_o2->t<<std::endl;
-        
+                
         for (; it_o2 != objs_.end(); ++it_o2)
+        {
           if (!it_o2->check_done)
             if (cv::norm(o_match->t, it_o2->t) < *th_obj_dist_)
             {
@@ -527,12 +637,11 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
               if ((it_o2->pts_model.size() > size_th) && (it_o2->icp_dist < o_match->icp_dist))
                 o_match = &(*it_o2);
             }
+		}
 		
         //perform the final precise icp
         float icp_px_match = 0.0f;
         float icp_dist = icpCloudToCloud(o_match->pts_ref, o_match->pts_model, o_match->r, o_match->t, icp_px_match, 0);
-		
-		
 		
         if (*verbose_)
           std::cout << o_match->match_class << " " << o_match->match_sim << " icp " << icp_dist << ", ";
@@ -541,22 +650,16 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
         //this distance is used to compute the ratio of inliers (points laying within this distance between the point clouds)
         icp_dist = 0.007f;
         float px_inliers_ratio = getL2distClouds(o_match->pts_model, o_match->pts_ref, icp_dist);
-         
-        /* Hier stehen die selben Werte drin Arraypositionen von 0 - ~2550 */     
         
         if (*verbose_)
           std::cout << " ratio " << o_match->icp_px_match << " or " << px_inliers_ratio << std::endl;
-
+          
         //add points to the clouds
 #if LINEMOD_VIZ_PCD
         pci_real_icpin_model->fill(o_match->pts_model, cv::Vec3b(0,255,0));
         pci_real_icpin_ref->fill(o_match->pts_ref, cv::Vec3b(0,0,255));
 #endif
-
-        //return the outcome object pose
-        
-        //~ std::cout<<"o_match->t"<<o_match->t<<std::endl;       
-        
+              
         pose_result.set_object_id(db_, o_match->match_class);
         pose_result.set_confidence(o_match->match_sim);
         pose_result.set_R(cv::Mat(o_match->r));
@@ -565,8 +668,8 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
 
         ++count_pass;
       } 
-    }
-    
+    }       
+
     if (*verbose_ && (matches.size()>0))
       std::cout << "matches  " << objs_.size() << " / " << count_pass << " / " << matches.size() << std::endl;
 
