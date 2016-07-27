@@ -2,11 +2,11 @@
   <name>object_recognition_linemod</name>
   <version>0.3.7</version>
   <description>An object recognition pipeline that uses LINE-MOD from OpenCV</description>
-  <author email="ms-152615@hs-weingarten.de">Marcel Schmidt</author>
-  <maintainer email="ms-152615@hs-weingarten.de">Marcel Schmidt</maintainer>
+  <author email="vincent.rabaud@gmail.com">Vincent Rabaud</author>
+  <maintainer email="vincent.rabaud@gmail.com">Vincent Rabaud</maintainer>
   <license>BSD</license>
   
-  <url>https://github.com/xMutzely/colorhist_detection</url>
+  <url>https://github.com/wg-perception/linemod</url>
 
   <build_depend>ecto</build_depend>
   <build_depend>object_recognition_core</build_depend>

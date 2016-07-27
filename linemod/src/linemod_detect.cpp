@@ -47,12 +47,10 @@
 
 #include <object_recognition_core/db/ModelReader.h>
 #include <object_recognition_core/common/pose_result.h>
-
-#include "db_linemod.h"
-
 #include <object_recognition_renderer/utils.h>
 #include <object_recognition_renderer/renderer3d.h>
 
+#include "db_linemod.h"
 #include "linemod_icp.h"
 
 using ecto::tendrils;
@@ -61,36 +59,23 @@ using object_recognition_core::db::ObjectId;
 using object_recognition_core::common::PoseResult;
 using object_recognition_core::db::ObjectDbPtr;
 
-bool info = true;
-
 #if LINEMOD_VIZ_IMG
-  #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #endif
 
 #if LINEMOD_VIZ_PCD
-  #include "ros/ros.h"
-  #include "linemod_pointcloud.h"
-  LinemodPointcloud *pci_real_icpin_model;
-  LinemodPointcloud *pci_real_icpin_ref;
+#include "ros/ros.h"
+#include "linemod_pointcloud.h"
+LinemodPointcloud *pci_real_icpin_model;
+LinemodPointcloud *pci_real_icpin_ref;
 #endif
-
-float getFactor(int value)
-{
-	return (100/value);
-}
-
-float getMax(float newValue, float oldMax)
-{
-	if(oldMax>=newValue)
-		return oldMax;
-	else
-		return newValue;
-}
 
 void drawResponse(const std::vector<cv::linemod::Template>& templates, int num_modalities, cv::Mat& dst, cv::Point offset, int T)
 {
   static const cv::Scalar COLORS[5] =
-  { CV_RGB(0, 0, 255), CV_RGB(0, 255, 0), CV_RGB(255, 255, 0), CV_RGB(255, 140, 0), CV_RGB(255, 0, 0) };
+  {
+    CV_RGB(0, 0, 255), CV_RGB(0, 255, 0), CV_RGB(255, 255, 0), CV_RGB(255, 140, 0), CV_RGB(255, 0, 0)
+  };
   if (dst.channels() == 1)
     cv::cvtColor(dst, dst, cv::COLOR_GRAY2BGR);
 
@@ -99,9 +84,9 @@ void drawResponse(const std::vector<cv::linemod::Template>& templates, int num_m
     num_modalities = 5;
   for (int m = 0; m < num_modalities; ++m)
   {
-// NOTE: Original demo recalculated max response for each feature in the TxT
-// box around it and chose the display color based on that response. Here
-// the display color just depends on the modality.
+    // NOTE: Original demo recalculated max response for each feature in the TxT
+    // box around it and chose the display color based on that response. Here
+    // the display color just depends on the modality.
     cv::Scalar color = COLORS[m];
 
     for (int i = 0; i < (int) templates[m].features.size(); ++i)
@@ -113,166 +98,84 @@ void drawResponse(const std::vector<cv::linemod::Template>& templates, int num_m
   }
 }
 
-cv::Mat visualizeHistogram(float array[][3], int avgColor[3]) //Falls zu langsam als Referenz übergeben &array[][3]
-{
-	/* Pixel 0 and 1 are not drawn so we need an offset of minimum 2 pixels */
-	const int xDrawingOffset=2;
-	const int yDrawingOffset=10;
-	float maxValue=0.0f;
-	float factor=1.0f;
-	int xSize = 480;
-	int ySize = 200;
-	
-	cv::Point pt1, pt2;
-	
-	// Create mat with alpha channel
-    cv::Mat mat(200+yDrawingOffset, xSize+xDrawingOffset, CV_8UC3);
-	mat = cv::Scalar(255,255,255);
-
-	/* Sucht den größten Wert(Prozentsatz) in den Farben */
-	for(int i=0; i<26; i++)
-	{
-		for(int j=0; j<3; j++)
-		{
-			maxValue=getMax(array[i][j],maxValue);
-		}
-	}
-	
-	/* Umrechnungsfaktor für 100 Pixel Höhe */
-	factor=getFactor(maxValue);
-
-	for(int j=0; j<3; j++)
-	{
-		for(int i=1; i<26; i++)
-		{
-			pt1.x=((i-1)*(ySize/10))+xDrawingOffset;
-			pt1.y=(factor*array[i-1][j])+yDrawingOffset;
-			
-			pt2.x=(i*(ySize/10))+xDrawingOffset;
-			pt2.y=(factor*array[i][j])+yDrawingOffset;
-			
-			/* Draws each individual line
-			 * j=0 red
-			 * j=1 green
-			 * j=2 blue
-			 * Scalar (blue,green,red)
-			*/
-			if(j==0)
-				line(mat,pt1,pt2, cv::Scalar(0,0,255),1,CV_AA,0);
-			if(j==1)
-				line(mat,pt1,pt2, cv::Scalar(0,255,0),1,CV_AA,0);
-			if(j==2)
-				line(mat,pt1,pt2, cv::Scalar(255,0,0),1,CV_AA,0);
-		}
-	}
-	
-	pt1.x = xDrawingOffset;
-	pt1.y = 2;
-	
-	pt2.x = xSize;
-	pt2.y = 2;
-	
-	/* Draw the average color as a 4 pixel thick line over the complete width */
-	cv::line(mat, pt1, pt2, cv::Scalar(avgColor[2],avgColor[1],avgColor[0]), 4, CV_AA, 0);
-	
-	/* Flip the y-Coordinate otherwise it would be up-side-down */
-	cv::flip(mat,mat,0);
-	
-	return mat;
-}
-
 int scale_color(int color_value)
-{	
-	int color;
-	int scaling_factor = 10;
-	
-	if((color_value%scaling_factor) > (scaling_factor/2))
-		color=color_value+(scaling_factor-color_value%scaling_factor);
-	else
-		color=color_value-(color_value%scaling_factor);
-		
-	return color;
-}
-
-int get_avg_color(int newColor, int avgColor, bool start, int counter)
 {
-	avgColor+=newColor;
-	
-	if(!start)
-		return avgColor; 
-	else
-		return round((avgColor/counter));
-}
+  int scaling_factor = 10;
 
+  if((color_value%scaling_factor) > (scaling_factor/2))
+    return (color_value+(scaling_factor-color_value%scaling_factor));
+  else
+    return (color_value-(color_value%scaling_factor));
+}
 
 namespace ecto_linemod
 {
-struct Detector: public object_recognition_core::db::bases::ModelReaderBase 
-{
-  void parameter_callback(const object_recognition_core::db::Documents & db_documents) 
+  struct Detector: public object_recognition_core::db::bases::ModelReaderBase
   {
-    /*if (submethod.get_str() == "DefaultLINEMOD")
-     detector_ = cv::linemod::getDefaultLINEMOD();
-     else
-     throw std::runtime_error("Unsupported method. Supported ones are: DefaultLINEMOD");*/
-
-    if(!(*use_rgb_) && !(*use_depth_))
-      throw std::runtime_error("Unsupported type of input data: either use_rgb or use_depth (or both) parameters shouled be true");
-    if(!(*use_rgb_) && *use_depth_)
-      std::cout << "WARNING:: Gradients computation will be based on depth data (but not rgb image)." << std::endl;
-    detector_ = cv::linemod::getDefaultLINEMOD();
-
-    BOOST_FOREACH(const object_recognition_core::db::Document & document, db_documents) 
+    void parameter_callback(const object_recognition_core::db::Documents & db_documents)
     {
-      std::string object_id = document.get_field<ObjectId>("object_id");
+      /*if (submethod.get_str() == "DefaultLINEMOD")
+       detector_ = cv::linemod::getDefaultLINEMOD();
+       else
+       throw std::runtime_error("Unsupported method. Supported ones are: DefaultLINEMOD");*/
 
-      // Load the detector for that class
-      cv::linemod::Detector detector;
-      document.get_attachment<cv::linemod::Detector>("detector", detector);
-      if (detector.classIds().empty())
+      if(!(*use_rgb_) && !(*use_depth_))
+        throw std::runtime_error("Unsupported type of input data: either use_rgb or use_depth (or both) parameters shouled be true");
+      if(!(*use_rgb_) && *use_depth_)
+        std::cout << "WARNING:: Gradients computation will be based on depth data (but not rgb image)." << std::endl;
+      detector_ = cv::linemod::getDefaultLINEMOD();
+
+      BOOST_FOREACH(const object_recognition_core::db::Document & document, db_documents)
       {
-        continue;
-	  }
-	  
-      std::string object_id_in_db = detector.classIds()[0];
-      
-      for (size_t template_id = 0; template_id < detector.numTemplates(); ++template_id) 
-      {
-        const std::vector<cv::linemod::Template> &templates_original = detector.getTemplates(object_id_in_db, template_id);
-        detector_->addSyntheticTemplate(templates_original, object_id);
+        std::string object_id = document.get_field<ObjectId>("object_id");
+
+        // Load the detector for that class
+        cv::linemod::Detector detector;
+        document.get_attachment<cv::linemod::Detector>("detector", detector);
+        if (detector.classIds().empty())
+        {
+          continue;
+        }
+
+        std::string object_id_in_db = detector.classIds()[0];
+
+        for (size_t template_id = 0; template_id < detector.numTemplates(); ++template_id)
+        {
+          const std::vector<cv::linemod::Template> &templates_original = detector.getTemplates(object_id_in_db, template_id);
+          detector_->addSyntheticTemplate(templates_original, object_id);
+        }
+
+        // Deal with the poses
+        document.get_attachment<std::vector<cv::Mat> >("Rs", Rs_[object_id]);
+        document.get_attachment<std::vector<cv::Mat> >("Ts", Ts_[object_id]);
+        document.get_attachment<std::vector<float> >("distances", distances_[object_id]);
+        document.get_attachment<std::vector<cv::Mat> >("Ks", Ks_[object_id]);
+        renderer_n_points_ = document.get_field<int>("renderer_n_points");
+        renderer_angle_step_ = document.get_field<int>("renderer_angle_step");
+        renderer_radius_min_  = document.get_field<double>("renderer_radius_min");
+        renderer_radius_max_ = document.get_field<double>("renderer_radius_max");
+        renderer_radius_step_ = document.get_field<double>("renderer_radius_step");
+        renderer_width_ = document.get_field<int>("renderer_width");
+        renderer_height_ = document.get_field<int>("renderer_height");
+        renderer_focal_length_x_ = document.get_field<double>("renderer_focal_length_x");
+        renderer_focal_length_y_ = document.get_field<double>("renderer_focal_length_y");
+        renderer_near_ = document.get_field<double>("renderer_near");
+        renderer_far_ = document.get_field<double>("renderer_far");
+
+        if (setupRenderer(object_id))
+        {
+          std::cout << "Loaded " << object_id
+                    << " with the number of samples " << Rs_[object_id].size() << std::endl << std::endl;
+        }
       }
 
-      // Deal with the poses
-      document.get_attachment<std::vector<cv::Mat> >("Rs", Rs_[object_id]);
-      document.get_attachment<std::vector<cv::Mat> >("Ts", Ts_[object_id]);
-      document.get_attachment<std::vector<float> >("distances", distances_[object_id]);
-      document.get_attachment<std::vector<cv::Mat> >("Ks", Ks_[object_id]);
-      renderer_n_points_ = document.get_field<int>("renderer_n_points");
-      renderer_angle_step_ = document.get_field<int>("renderer_angle_step");
-      renderer_radius_min_  = document.get_field<double>("renderer_radius_min");
-      renderer_radius_max_ = document.get_field<double>("renderer_radius_max");
-      renderer_radius_step_ = document.get_field<double>("renderer_radius_step");
-      renderer_width_ = document.get_field<int>("renderer_width");
-      renderer_height_ = document.get_field<int>("renderer_height");
-      renderer_focal_length_x_ = document.get_field<double>("renderer_focal_length_x");
-      renderer_focal_length_y_ = document.get_field<double>("renderer_focal_length_y");
-      renderer_near_ = document.get_field<double>("renderer_near");
-      renderer_far_ = document.get_field<double>("renderer_far");
-
-      if (setupRenderer(object_id))
-      {
-        std::cout << "Loaded " << object_id
-                << " with the number of samples " << Rs_[object_id].size() << std::endl << std::endl;
-	  }
-    }
-
-    //initialize the visualization
+      //initialize the visualization
 #if LINEMOD_VIZ_PCD
-    ros::NodeHandle node_;
-    pci_real_icpin_model = new LinemodPointcloud(node_, "real_icpin_model", *depth_frame_id_);
-    pci_real_icpin_ref = new LinemodPointcloud(node_, "real_icpin_ref", *depth_frame_id_);
+      ros::NodeHandle node_;
+      pci_real_icpin_model = new LinemodPointcloud(node_, "real_icpin_model", *depth_frame_id_);
+      pci_real_icpin_ref = new LinemodPointcloud(node_, "real_icpin_ref", *depth_frame_id_);
 #endif
-  }
+    }
 
     static void declare_params(tendrils& params)
     {
@@ -295,6 +198,7 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       inputs.declare(&Detector::K_depth_, "K_depth", "The calibration matrix").required();
 
       outputs.declare(&Detector::pose_results_, "pose_results", "The results of object recognition");
+      outputs.declare(&Detector::model_colorValues_, "model_colorValues", "Color histograms of the recognized objects");
     }
 
     void configure(const tendrils& params, const tendrils& inputs, const tendrils& outputs)
@@ -312,14 +216,14 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       // Get the document for the object_id_ from the DB
       object_recognition_core::db::ObjectDbPtr db = db_params.generateDb();
       object_recognition_core::db::Documents documents =
-          object_recognition_core::db::ModelDocuments(db,
-              std::vector<object_recognition_core::db::ObjectId>(1,
-                  object_id), "mesh");
-      
-      if (documents.empty()) 
+        object_recognition_core::db::ModelDocuments(db,
+            std::vector<object_recognition_core::db::ObjectId>(1,
+                object_id), "mesh");
+
+      if (documents.empty())
       {
         std::cerr << "Skipping object id \"" << object_id
-            << "\" : no mesh in the DB" << std::endl;
+                  << "\" : no mesh in the DB" << std::endl;
         return false;
       }
 
@@ -330,13 +234,13 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       std::vector<std::string> possible_names(2);
       possible_names[0] = "original";
       possible_names[1] = "mesh";
-      for (size_t i = 0; i < possible_names.size() && mesh_path.empty(); ++i) 
+      for (size_t i = 0; i < possible_names.size() && mesh_path.empty(); ++i)
       {
         BOOST_FOREACH(const std::string& attachment_name, attachments_names)
         {
           if (attachment_name.find(possible_names[i]) != 0)
             continue;
-            
+
           std::cout << "Reading the mesh file " << attachment_name << std::endl;
           // Create a temporary file
           char mesh_path_tmp[L_tmpnam];
@@ -382,21 +286,21 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       /// @todo Move resizing to separate cell, and try LINE-MOD w/ SXGA images
 
       cv::Mat display;
-      cv::Mat color;  
+      cv::Mat color;
 
       if (color_->rows > 960)
-		cv::pyrDown(color_->rowRange(0, 960), color);
-        
+        cv::pyrDown(color_->rowRange(0, 960), color);
+
       else
-		color_->copyTo(color);	  
+        color_->copyTo(color);
 
       if (*visualize_)
-		display = color;
-		
-	  cv::Mat rawColor = color.clone();
+        display = color;
+
+      cv::Mat rawColor = color.clone();
 
       sources.push_back(color);
-		
+
       cv::Mat depth = *depth_;
       if (depth_->depth() == CV_32F)
         depth_->convertTo(depth, CV_16UC1, 1000.0);
@@ -423,7 +327,7 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       cv::Mat_<float> K;
       K_depth_->convertTo(K, CV_32F);
       cv::depthTo3d(depth, K, depth_real_ref_raw);
-      
+
       float colorhist_array[26][3];
       cv::Mat colorROI;
 
@@ -436,260 +340,207 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
       pci_real_icpin_ref->clear();
 #endif
 
-    BOOST_FOREACH(const cv::linemod::Match & match, matches) 
-    {
-      const std::vector<cv::linemod::Template>& templates =
-          detector_->getTemplates(match.class_id, match.template_id);
-      if (*visualize_)
-        drawResponse(templates, num_modalities, display,
-            cv::Point(match.x, match.y), detector_->getT(0));
-
-      // Fill the Pose object
-      cv::Matx33d R_match = Rs_.at(match.class_id)[match.template_id].clone();
-      cv::Vec3d T_match = Ts_.at(match.class_id)[match.template_id].clone();
-      float D_match = distances_.at(match.class_id)[match.template_id];
-      cv::Mat K_match = Ks_.at(match.class_id)[match.template_id];
-
-      //get the point cloud of the rendered object model
-      cv::Mat mask;
-      cv::Rect rect;
-      cv::Matx33d R_temp(R_match.inv());
-      cv::Vec3d up(-R_temp(0,1), -R_temp(1,1), -R_temp(2,1));
-      RendererIterator* it_r = renderer_iterators_.at(match.class_id);
-      cv::Mat depth_ref_;
-      it_r->renderDepthOnly(depth_ref_, mask, rect, -T_match, up);
-
-      cv::Mat_<cv::Vec3f> depth_real_model_raw;
-      
-      cv::depthTo3d(depth_ref_, K_match, depth_real_model_raw);
-
-	  if(info)
-	  {
-		std::cout<<"depth_real_model_raw: "<<depth_real_model_raw.cols<<" "<<depth_real_model_raw.rows<<std::endl;
-		std::cout<<"depth_real_ref_raw: "<<depth_real_ref_raw.cols<<" "<<depth_real_ref_raw.rows<<std::endl;
-	  }
-
-      //prepare the bounding box for the model and reference point clouds
-      cv::Rect_<int> rect_model(0, 0, depth_real_model_raw.cols, depth_real_model_raw.rows);
-      //prepare the bounding box for the reference point cloud: add the offset
-      cv::Rect_<int> rect_ref(rect_model);
-      	  
-      rect_ref.x += match.x;
-      rect_ref.y += match.y;
-
-      rect_ref = rect_ref & cv::Rect(0, 0, depth_real_ref_raw.cols, depth_real_ref_raw.rows);
-      
-      if(info)
-		std::cout<<"Rect_ref: "<<rect_ref.x<<" "<<rect_ref.y<<std::endl;
-      
-      if ((rect_ref.width < 5) || (rect_ref.height < 5))
-        continue;
-        
-      //adjust both rectangles to be equal to the smallest among them
-      if (rect_ref.width > rect_model.width)
-        rect_ref.width = rect_model.width;
-        
-      if (rect_ref.height > rect_model.height)
-        rect_ref.height = rect_model.height;
-        
-      if (rect_model.width > rect_ref.width)
-        rect_model.width = rect_ref.width;
-        
-      if (rect_model.height > rect_ref.height)
-        rect_model.height = rect_ref.height;
-
-	  if(info)
-		std::cout<<"Rect_model: "<<rect_ref.x<<" "<<rect_ref.y<<" "<<rect_model.width<<" "<<rect_model.height<<std::endl;
-
-      //prepare the reference data: from the sensor : crop images
-      cv::Mat_<cv::Vec3f> depth_real_ref = depth_real_ref_raw(rect_ref);
-      //prepare the model data: from the match
-      cv::Mat_<cv::Vec3f> depth_real_model = depth_real_model_raw(rect_model);
-
-      //initialize the translation based on reference data
-      cv::Vec3f T_crop = depth_real_ref(depth_real_ref.rows / 2.0f, depth_real_ref.cols / 2.0f);
-      //add the object's depth
-      T_crop(2) += D_match; 
-	  
-      if (!cv::checkRange(T_crop))
-        continue;
-      cv::Vec3f T_real_icp(T_crop);
-
-      //initialize the rotation based on model data
-      if (!cv::checkRange(R_match))
-        continue;
-      cv::Matx33f R_real_icp(R_match);
-
-      //get the point clouds (for both reference and model)
-      std::vector<cv::Vec3f> pts_real_model_temp;
-      std::vector<cv::Vec3f> pts_real_ref_temp;
-      float px_ratio_missing = matToVec(depth_real_ref, depth_real_model, pts_real_ref_temp, pts_real_model_temp);
-      if (px_ratio_missing > (1.0f-*px_match_min_))
-        continue;
-
-      //perform the first approximate ICP
-      float px_ratio_match_inliers = 0.0f;
-      float icp_dist = icpCloudToCloud(pts_real_ref_temp, pts_real_model_temp, R_real_icp, T_real_icp, px_ratio_match_inliers, 1);
-      //reject the match if the icp distance is too big
-      if (icp_dist > *icp_dist_min_)
-        continue;
-
-      //perform a finer ICP
-      icp_dist = icpCloudToCloud(pts_real_ref_temp, pts_real_model_temp, R_real_icp, T_real_icp, px_ratio_match_inliers, 2);
-
-	  if(info)
-	  {
-		for(int i=0; i<3; i++)
-		{
-			std::cout<<"pts_real_ref_temp: "<<i<<" "<<pts_real_ref_temp[i]<<std::endl;
-			std::cout<<"pts_real_model_temp: "<<i<<" "<<pts_real_model_temp[i]<<std::endl;
-		}
-      }
-      
-      /* std::vector<cv::Mat>  colorValues; => colorValues[i].at<float>(0,j); */
-	  /* Werte: X -> links, y -> runter, z -> von Kamera weg */
-
-      for(int i=0; i<26; i++)
-	  {
-	    for(int j=0; j<3; j++)
-		{
-			colorhist_array[i][j]=0;
-		}
-	  }
-      
-      /* Visualize the ROI */
-	  colorROI = rawColor(cv::Rect(match.x, match.y, rect_model.width, rect_model.height));
-	  int counter = 0;
-	  int avgColor[3] = {0,0,0};
-	  
-	  for(int i=0; i<colorROI.cols; i++)
-	  {
-		for(int j=0; j<colorROI.rows;j++)
-	 	{
-			cv::Vec3f & depthPixel = depth_real_model_raw.at<cv::Vec3f>(j,i); 
-			
-			if(depthPixel[0]!=depthPixel[0]||depthPixel[1]!=depthPixel[1]||depthPixel[2]!=depthPixel[2]||depthPixel[2]<0.2);
-			else
-			{	
-				counter++;
-				cv::Vec3b colorPixel = colorROI.at<cv::Vec3b>(cv::Point(i,j)); 
-				/* Color values between 0 - 255 are normalized in steps of 10
-				 * This values from 0 - 250 get divided by 10 to get 26 steps
-				 */
-				
-				std::cout<<(int)colorPixel[0]<<" "<<(int)colorPixel[1]<<" "<<(int)colorPixel[2]<<std::endl;
-				
-				avgColor[0]=get_avg_color(colorPixel[0], avgColor[0], false, counter);
-				avgColor[1]=get_avg_color(colorPixel[1], avgColor[1], false, counter);
-				avgColor[2]=get_avg_color(colorPixel[2], avgColor[2], false, counter);
-				 
-				colorhist_array[(int)(scale_color(colorPixel[0])/10)][0]++;
-			    colorhist_array[(int)(scale_color(colorPixel[1])/10)][1]++;
-			    colorhist_array[(int)(scale_color(colorPixel[2])/10)][2]++;	
-			}
-		}	
-	  } 
-	  
-	  avgColor[0]=get_avg_color(0, avgColor[0], true, counter);
-	  avgColor[1]=get_avg_color(0, avgColor[1], true, counter);
-	  avgColor[2]=get_avg_color(0, avgColor[2], true, counter);	
-	  
-	  std::cout<<avgColor[0]<<" "<<avgColor[1]<<" "<<avgColor[2]<<std::endl;
-	
-      cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
-	  cv::imshow( "Display window", colorROI );                // Show our image inside it.
-	  cv::waitKey(0);
-      /* ----------------- */
-      
-      //keep the object match
-      objs_.push_back(object_recognition_core::db::ObjData(pts_real_ref_temp, pts_real_model_temp, match.class_id, match.similarity, icp_dist, px_ratio_match_inliers, R_real_icp, T_crop));
-      ++iter;
-    }
-
-    //local non-maxima supression to find the best match at each position
-    int count_pass = 0;
-    std::vector <object_recognition_core::db::ObjData>::iterator it_o = objs_.begin();
-    for (; it_o != objs_.end(); ++it_o)
-    {
-      if (!it_o->check_done)
+      BOOST_FOREACH(const cv::linemod::Match & match, matches)
       {
-        //initialize the object to publish
-        object_recognition_core::db::ObjData *o_match = &(*it_o);
-        int size_th = static_cast<int>((float)o_match->pts_model.size()*0.85);
-        
-        if(info)
+        const std::vector<cv::linemod::Template>& templates =
+          detector_->getTemplates(match.class_id, match.template_id);
+        if (*visualize_)
+          drawResponse(templates, num_modalities, display,
+                       cv::Point(match.x, match.y), detector_->getT(0));
+
+        // Fill the Pose object
+        cv::Matx33d R_match = Rs_.at(match.class_id)[match.template_id].clone();
+        cv::Vec3d T_match = Ts_.at(match.class_id)[match.template_id].clone();
+        float D_match = distances_.at(match.class_id)[match.template_id];
+        cv::Mat K_match = Ks_.at(match.class_id)[match.template_id];
+
+        //get the point cloud of the rendered object model
+        cv::Mat mask;
+        cv::Rect rect;
+        cv::Matx33d R_temp(R_match.inv());
+        cv::Vec3d up(-R_temp(0,1), -R_temp(1,1), -R_temp(2,1));
+        RendererIterator* it_r = renderer_iterators_.at(match.class_id);
+        cv::Mat depth_ref_;
+        it_r->renderDepthOnly(depth_ref_, mask, rect, -T_match, up);
+
+        cv::Mat_<cv::Vec3f> depth_real_model_raw;
+
+        cv::depthTo3d(depth_ref_, K_match, depth_real_model_raw);
+
+        //prepare the bounding box for the model and reference point clouds
+        cv::Rect_<int> rect_model(0, 0, depth_real_model_raw.cols, depth_real_model_raw.rows);
+        //prepare the bounding box for the reference point cloud: add the offset
+        cv::Rect_<int> rect_ref(rect_model);
+
+        rect_ref.x += match.x;
+        rect_ref.y += match.y;
+
+        rect_ref = rect_ref & cv::Rect(0, 0, depth_real_ref_raw.cols, depth_real_ref_raw.rows);
+
+        if ((rect_ref.width < 5) || (rect_ref.height < 5))
+          continue;
+
+        //adjust both rectangles to be equal to the smallest among them
+        if (rect_ref.width > rect_model.width)
+          rect_ref.width = rect_model.width;
+
+        if (rect_ref.height > rect_model.height)
+          rect_ref.height = rect_model.height;
+
+        if (rect_model.width > rect_ref.width)
+          rect_model.width = rect_ref.width;
+
+        if (rect_model.height > rect_ref.height)
+          rect_model.height = rect_ref.height;
+
+        //prepare the reference data: from the sensor : crop images
+        cv::Mat_<cv::Vec3f> depth_real_ref = depth_real_ref_raw(rect_ref);
+        //prepare the model data: from the match
+        cv::Mat_<cv::Vec3f> depth_real_model = depth_real_model_raw(rect_model);
+
+        //initialize the translation based on reference data
+        cv::Vec3f T_crop = depth_real_ref(depth_real_ref.rows / 2.0f, depth_real_ref.cols / 2.0f);
+        //add the object's depth
+        T_crop(2) += D_match;
+
+        if (!cv::checkRange(T_crop))
+          continue;
+        cv::Vec3f T_real_icp(T_crop);
+
+        //initialize the rotation based on model data
+        if (!cv::checkRange(R_match))
+          continue;
+        cv::Matx33f R_real_icp(R_match);
+
+        //get the point clouds (for both reference and model)
+        std::vector<cv::Vec3f> pts_real_model_temp;
+        std::vector<cv::Vec3f> pts_real_ref_temp;
+        float px_ratio_missing = matToVec(depth_real_ref, depth_real_model, pts_real_ref_temp, pts_real_model_temp);
+        if (px_ratio_missing > (1.0f-*px_match_min_))
+          continue;
+
+        //perform the first approximate ICP
+        float px_ratio_match_inliers = 0.0f;
+        float icp_dist = icpCloudToCloud(pts_real_ref_temp, pts_real_model_temp, R_real_icp, T_real_icp, px_ratio_match_inliers, 1);
+        //reject the match if the icp distance is too big
+        if (icp_dist > *icp_dist_min_)
+          continue;
+
+        //perform a finer ICP
+        icp_dist = icpCloudToCloud(pts_real_ref_temp, pts_real_model_temp, R_real_icp, T_real_icp, px_ratio_match_inliers, 2);
+
+        /* Set all array elements to zero (memset = c / fill = c++ but it calls memset) */
+        memset(colorhist_array, 0, sizeof(colorhist_array[0][0]) * 26 * 3);
+
+        /* Visualize the ROI */
+        colorROI = rawColor(cv::Rect(match.x, match.y, rect_model.width, rect_model.height));
+        int counter = 0;
+
+        for(int i=0; i<colorROI.cols; i++)
         {
-			std::cout<<"pts_model.size: "<<(float)o_match->pts_model.size()<<std::endl;
-			std::cout<<"pts_model.1: "<<o_match->pts_model[1]<<std::endl;
-			std::cout<<"pts_ref.1: "<<o_match->pts_ref[1]<<std::endl;
-        }
-        
-        //find the best object match among near objects
-        std::vector <object_recognition_core::db::ObjData>::iterator it_o2 = it_o;
-        ++it_o2;
-                
-        for (; it_o2 != objs_.end(); ++it_o2)
-        {
-          if (!it_o2->check_done)
-            if (cv::norm(o_match->t, it_o2->t) < *th_obj_dist_)
+          for(int j=0; j<colorROI.rows; j++)
+          {
+            cv::Vec3f & depthPixel = depth_real_model_raw.at<cv::Vec3f>(j,i);
+
+            if(depthPixel[0]!=depthPixel[0]||depthPixel[1]!=depthPixel[1]||depthPixel[2]!=depthPixel[2]||depthPixel[2]<0.2);
+            else
             {
-              it_o2->check_done = true;
-              if ((it_o2->pts_model.size() > size_th) && (it_o2->icp_dist < o_match->icp_dist))
-                o_match = &(*it_o2);
+              counter++;
+              cv::Vec3b colorPixel = colorROI.at<cv::Vec3b>(cv::Point(i,j));
+              /* Color values between 0 - 255 are normalized in steps of 10
+               * This values from 0 - 250 get divided by 10 to get 26 steps
+               */
+              colorhist_array[(int)(scale_color(colorPixel[0])/10)][0]++;
+              colorhist_array[(int)(scale_color(colorPixel[1])/10)][1]++;
+              colorhist_array[(int)(scale_color(colorPixel[2])/10)][2]++;
             }
-		}
-		
-        //perform the final precise icp
-        float icp_px_match = 0.0f;
-        float icp_dist = icpCloudToCloud(o_match->pts_ref, o_match->pts_model, o_match->r, o_match->t, icp_px_match, 0);
-		
-        if (*verbose_)
-          std::cout << o_match->match_class << " " << o_match->match_sim << " icp " << icp_dist << ", ";
+          }
+        }
 
-        //icp_dist in the same units as the sensor data
-        //this distance is used to compute the ratio of inliers (points laying within this distance between the point clouds)
-        icp_dist = 0.007f;
-        float px_inliers_ratio = getL2distClouds(o_match->pts_model, o_match->pts_ref, icp_dist);
-        
-        if (*verbose_)
-          std::cout << " ratio " << o_match->icp_px_match << " or " << px_inliers_ratio << std::endl;
-          
-        //add points to the clouds
+        cv::Mat M= cv::Mat(26,3, CV_32F, colorhist_array);
+        model_colorValues_->push_back(cv::Mat(M));
+
+        //keep the object match
+        objs_.push_back(object_recognition_core::db::ObjData(pts_real_ref_temp, pts_real_model_temp, match.class_id, match.similarity, icp_dist, px_ratio_match_inliers, R_real_icp, T_crop));
+        ++iter;
+      }
+
+      //local non-maxima supression to find the best match at each position
+      int count_pass = 0;
+      std::vector <object_recognition_core::db::ObjData>::iterator it_o = objs_.begin();
+      for (; it_o != objs_.end(); ++it_o)
+      {
+        if (!it_o->check_done)
+        {
+          //initialize the object to publish
+          object_recognition_core::db::ObjData *o_match = &(*it_o);
+          int size_th = static_cast<int>((float)o_match->pts_model.size()*0.85);
+
+          //find the best object match among near objects
+          std::vector <object_recognition_core::db::ObjData>::iterator it_o2 = it_o;
+          ++it_o2;
+
+          for (; it_o2 != objs_.end(); ++it_o2)
+          {
+            if (!it_o2->check_done)
+              if (cv::norm(o_match->t, it_o2->t) < *th_obj_dist_)
+              {
+                it_o2->check_done = true;
+                if ((it_o2->pts_model.size() > size_th) && (it_o2->icp_dist < o_match->icp_dist))
+                  o_match = &(*it_o2);
+              }
+          }
+
+          //perform the final precise icp
+          float icp_px_match = 0.0f;
+          float icp_dist = icpCloudToCloud(o_match->pts_ref, o_match->pts_model, o_match->r, o_match->t, icp_px_match, 0);
+
+          if (*verbose_)
+            std::cout << o_match->match_class << " " << o_match->match_sim << " icp " << icp_dist << ", ";
+
+          //icp_dist in the same units as the sensor data
+          //this distance is used to compute the ratio of inliers (points laying within this distance between the point clouds)
+          icp_dist = 0.007f;
+          float px_inliers_ratio = getL2distClouds(o_match->pts_model, o_match->pts_ref, icp_dist);
+
+          if (*verbose_)
+            std::cout << " ratio " << o_match->icp_px_match << " or " << px_inliers_ratio << std::endl;
+
+          //add points to the clouds
 #if LINEMOD_VIZ_PCD
-        pci_real_icpin_model->fill(o_match->pts_model, cv::Vec3b(0,255,0));
-        pci_real_icpin_ref->fill(o_match->pts_ref, cv::Vec3b(0,0,255));
+          pci_real_icpin_model->fill(o_match->pts_model, cv::Vec3b(0,255,0));
+          pci_real_icpin_ref->fill(o_match->pts_ref, cv::Vec3b(0,0,255));
 #endif
-              
-        pose_result.set_object_id(db_, o_match->match_class);
-        pose_result.set_confidence(o_match->match_sim);
-        pose_result.set_R(cv::Mat(o_match->r));
-        pose_result.set_T(cv::Mat(o_match->t));
-        pose_results_->push_back(pose_result);
+          pose_result.set_object_id(db_, o_match->match_class);
+          pose_result.set_confidence(o_match->match_sim);
+          pose_result.set_R(cv::Mat(o_match->r));
+          pose_result.set_T(cv::Mat(o_match->t));
+          pose_results_->push_back(pose_result);
 
-        ++count_pass;
-      } 
-    }       
+          ++count_pass;
+        }
+      }
 
-    if (*verbose_ && (matches.size()>0))
-      std::cout << "matches  " << objs_.size() << " / " << count_pass << " / " << matches.size() << std::endl;
+      if (*verbose_ && (matches.size()>0))
+        std::cout << "matches  " << objs_.size() << " / " << count_pass << " / " << matches.size() << std::endl;
 
-    //publish the point clouds
+      //publish the point clouds
 #if LINEMOD_VIZ_PCD
-    pci_real_icpin_model->publish();
-    pci_real_icpin_ref->publish();
+      pci_real_icpin_model->publish();
+      pci_real_icpin_ref->publish();
 #endif
 #if LINEMOD_VIZ_IMG
-    if (*visualize_) {
-      cv::namedWindow("LINEMOD");
-      cv::imshow("LINEMOD", display);
-      cv::waitKey(1);
-    }
+      if (*visualize_) {
+        cv::namedWindow("LINEMOD");
+        cv::imshow("LINEMOD", display);
+        cv::waitKey(1);
+      }
 #endif
-    return ecto::OK;
-  }
+      return ecto::OK;
+    }
 
-  /** LINE-MOD detector */
-  cv::Ptr<cv::linemod::Detector> detector_;
+    /** LINE-MOD detector */
+    cv::Ptr<cv::linemod::Detector> detector_;
     // Parameters
     spore<float> threshold_;
     // Inputs
@@ -698,7 +549,6 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
     spore<cv::Mat> K_depth_;
     /** The buffer with detected objects and their info */
     std::vector <object_recognition_core::db::ObjData> objs_;
-
     /** True or False to output debug image */
     ecto::spore<bool> visualize_;
     /** True or False to use input rgb image */
@@ -717,6 +567,8 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
     ecto::spore<float> px_match_min_;
     /** The object recognition results */
     ecto::spore<std::vector<PoseResult> > pose_results_;
+    /** The color values for each recognized object */
+    ecto::spore<std::vector<cv::Mat> > model_colorValues_;
     /** The rotations, per object and per template */
     std::map<std::string, std::vector<cv::Mat> > Rs_;
     /** The translations, per object and per template */
@@ -750,7 +602,6 @@ struct Detector: public object_recognition_core::db::bases::ModelReaderBase
     /** Renderer parameter: focal length y */
     double renderer_focal_length_y_;
   };
-
 } // namespace ecto_linemod
 
 ECTO_CELL(ecto_linemod, ecto_linemod::Detector, "Detector", "Use LINE-MOD for object detection.")

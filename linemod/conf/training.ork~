@@ -1,0 +1,19 @@
+pipeline1:
+  type: LinemodTrainer
+  module: 'object_recognition_linemod'
+  parameters:
+    # The list of object_ids to analyze
+    object_ids: '30154d145800ca2c6ac90ee157020f34'
+    # Apple	
+    # 'c489b66b4c90f5c946bcf38171007b4a'
+    # Pringles
+    # '139046e474d6d722a755d2930e00080e'
+    # Cup
+    #'30154d145800ca2c6ac90ee1570200e8'
+    # Cola
+    # 'c489b66b4c90f5c946bcf38171007b4a'
+
+    db:
+      type: 'CouchDB'
+      root: 'http://localhost:5984'
+      collection: 'object_recognition'
