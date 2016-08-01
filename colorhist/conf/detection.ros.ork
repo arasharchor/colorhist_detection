@@ -3,7 +3,7 @@ pipeline1:
   type: ColorHistDetector
   module: object_recognition_colorhist
   parameters:
-    object_ids: "all"
+    object_ids: 'all'
     db:
       type: 'CouchDB'
       root: 'http://localhost:5984'

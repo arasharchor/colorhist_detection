@@ -31,59 +31,59 @@ using namespace cv;
 using namespace std;
 
 /* cell storing the 3d points and descriptors while a model is being computed */
-struct ModelReader 
+struct ModelReader
 {
-	public:
-	  static void declare_io(const ecto::tendrils& params, ecto::tendrils& inputs, ecto::tendrils& outputs)  
-	  {  
-		inputs.declare(&ModelReader::json_db_, "json_db", "The parameters of the DB as a JSON string.").required(true); 
-		//~ inputs.declare(&ModelReader::object_id_, "object_id", "The id of the object in the DB.").required(true);
-		outputs.declare < std::vector<cv::Mat> > ("colorValues", "Color values in a matrix"); 
-	  }
+  public:
+    static void declare_io(const ecto::tendrils& params, ecto::tendrils& inputs, ecto::tendrils& outputs)
+    {
+      inputs.declare(&ModelReader::json_db_, "json_db", "The parameters of the DB as a JSON string.").required(true);
+      //~ inputs.declare(&ModelReader::object_id_, "object_id", "The id of the object in the DB.").required(true);
+      outputs.declare < std::vector<cv::Mat> > ("model_colorValues", "Color values in a matrix");
+    }
 
-	  int process(const ecto::tendrils& inputs, const ecto::tendrils& outputs) 
-	  {  
-		/* Get the DB */
-		object_recognition_core::db::ObjectDbPtr db =
-			object_recognition_core::db::ObjectDbParameters(*json_db_).generateDb();
-		object_recognition_core::db::Documents documents =
-			object_recognition_core::db::ModelDocuments(db,
-				std::vector<object_recognition_core::db::ObjectId>(1, "544ac4d13f955e6ebb22518b3f002734" ), "ColorHist");
-		
-		if (documents.empty()) 
-		{
-		  std::cerr << "Skipping object id"<<std::endl;
-		  //~ std::cerr << "Skipping object id \"" << *object_id_ << "\" : no mesh in the DB" << std::endl;
-		  return ecto::OK;
-		}
+    int process(const ecto::tendrils& inputs, const ecto::tendrils& outputs)
+    {
+      /* Get the DB */
+      object_recognition_core::db::ObjectDbPtr db =
+        object_recognition_core::db::ObjectDbParameters(*json_db_).generateDb();
+      object_recognition_core::db::Documents documents =
+        object_recognition_core::db::ModelDocuments(db,
+            std::vector<object_recognition_core::db::ObjectId>(1, "544ac4d13f955e6ebb22518b3f002734" ), "ColorHist");
 
-		/* Get the list of _attachments and figure out the original one */
-		object_recognition_core::db::Document document = documents[0];
-		std::vector<std::string> attachments_names = document.attachment_names();
-		std::string possible_name = "colorValues";
-		  
-		BOOST_FOREACH(const std::string& attachment_name, attachments_names) 
-		{        
-			if (attachment_name.find(possible_name) != 0)
-			{
-				continue;
-			}  
-			
-			document.get_attachment<std::vector<cv::Mat> >(attachment_name, colorValues);
-		}
-		outputs["colorValues"] << colorValues;
-		
-		return ecto::OK;
-	  }
-	  
-	private:
-	  ecto::spore<std::string> json_feature_params_;
-	  ecto::spore<std::string> json_descriptor_params_;
-	  ecto::spore<std::string> object_id_;
-	  ecto::spore<std::string> json_db_;
-	  std::vector<cv::Mat> colorValues;
+      if (documents.empty())
+      {
+        std::cerr << "Skipping object id"<<std::endl;
+        //~ std::cerr << "Skipping object id \"" << *object_id_ << "\" : no mesh in the DB" << std::endl;
+        return ecto::OK;
+      }
+
+      /* Get the list of _attachments and figure out the original one */
+      object_recognition_core::db::Document document = documents[0];
+      std::vector<std::string> attachments_names = document.attachment_names();
+      std::string possible_name = "colorValues";
+
+      BOOST_FOREACH(const std::string& attachment_name, attachments_names)
+      {
+        if (attachment_name.find(possible_name) != 0)
+        {
+          continue;
+        }
+
+        document.get_attachment<std::vector<cv::Mat> >(attachment_name, model_colorValues);
+      }
+      outputs["model_colorValues"] << model_colorValues;
+
+      return ecto::OK;
+    }
+
+  private:
+    ecto::spore<std::string> json_feature_params_;
+    ecto::spore<std::string> json_descriptor_params_;
+    ecto::spore<std::string> object_id_;
+    ecto::spore<std::string> json_db_;
+    std::vector<cv::Mat> model_colorValues;
 };
 
 ECTO_CELL(colorhist_detection, ModelReader, "ModelReader",
-    "Compute ColorHist models for a given object")
-    
+          "Compute ColorHist models for a given object")
+

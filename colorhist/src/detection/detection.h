@@ -5,6 +5,7 @@
 
 
 bool methodCRG (float frameHist[][3], float modelHist[][3]);
+
 double methodChiQuadratic (cv::MatND frameHist, cv::MatND modelHist);
 
 double methodCorrelation (cv::MatND frameHist, cv::MatND modelHist);

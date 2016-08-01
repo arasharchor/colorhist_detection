@@ -161,8 +161,8 @@ struct Trainer
 		 * color_list[x][2] = blue
 		 * 
 		 * 0 - 255 color values are scaled in steps by 10
-		 * => 25 steps
-		 * 2-dimensional array[25][3]
+		 * => 26 steps
+		 * 2-dimensional array[26][3]
 		*/
 
 		float colorhist_array[26][3];
