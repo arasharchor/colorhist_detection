@@ -22,8 +22,10 @@ class ColorHistDetector(ecto.BlackBox, DetectorBase):
     @staticmethod
     def declare_cells(p):
         # passthrough cells
-        cells = {'json_db': CellInfo(ecto.Constant)}
-                 #'object_id': CellInfo(ecto.Constant),
+        cells = {'json_db': CellInfo(ecto.Constant),
+				 #'object_id': CellInfo(ecto.Constant),
+                 'passthrough': CellInfo(ecto.PassthroughN, {'items':{'object_colorValues':'Values'}})}
+
                 
         cells.update({'model_reader': colorhist_detection.ModelReader(),
                       'detector': CellInfo(colorhist_detection.Detector)})        
@@ -34,7 +36,7 @@ class ColorHistDetector(ecto.BlackBox, DetectorBase):
         p = {'json_db': [Forward('value', 'json_db')]}
              #'object_id': [Forward('value', 'object_id')]}
         p.update({'detector': 'all'})
-        i = {}
+        i = {'passthrough': [Forward('object_colorValues')]}
         o = {'detector': [Forward('pose_results')]}
 
         return (p,i,o)
@@ -45,7 +47,8 @@ class ColorHistDetector(ecto.BlackBox, DetectorBase):
 
     def connections(self, p):
         connections = [ self.json_db[:] >> self.model_reader['json_db'] ]
-       # self.object_id[:] >> self.model_reader['object_id'] ]
+        #connections += [self.object_id[:] >> self.model_reader['object_id'] ]
+        connections += [ self.passthrough['object_colorValues'] >> self.detector['object_colorValues'] ]
         connections += [ self.model_reader['model_colorValues'] >> self.detector['model_colorValues'] ]
 
         

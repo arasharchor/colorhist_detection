@@ -38,6 +38,7 @@ struct ModelReader
     {
       inputs.declare(&ModelReader::json_db_, "json_db", "The parameters of the DB as a JSON string.").required(true);
       //~ inputs.declare(&ModelReader::object_id_, "object_id", "The id of the object in the DB.").required(true);
+
       outputs.declare < std::vector<cv::Mat> > ("model_colorValues", "Color values in a matrix");
     }
 

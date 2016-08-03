@@ -18,12 +18,11 @@ link_ecto(colorhist_training ${catkin_LIBRARIES}
 # deal with the detection colorhist module
 ectomodule(colorhist_detection DESTINATION ${PROJECT_NAME}
                           INSTALL  
-#                          detection/DescriptorMatcher.cpp
                           detection/Detector.cpp
                           detection/ModelReader.cpp
                           detection/module.cpp
-                          common/db_colorhist.cpp
 			  detection/detection.cpp
+                          common/db_colorhist.cpp
 )
 
 link_ecto(colorhist_detection ${OpenCV_LIBRARIES}
