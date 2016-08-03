@@ -114,11 +114,6 @@ namespace ecto_linemod
   {
     void parameter_callback(const object_recognition_core::db::Documents & db_documents)
     {
-      /*if (submethod.get_str() == "DefaultLINEMOD")
-       detector_ = cv::linemod::getDefaultLINEMOD();
-       else
-       throw std::runtime_error("Unsupported method. Supported ones are: DefaultLINEMOD");*/
-
       if(!(*use_rgb_) && !(*use_depth_))
         throw std::runtime_error("Unsupported type of input data: either use_rgb or use_depth (or both) parameters shouled be true");
       if(!(*use_rgb_) && *use_depth_)
@@ -198,7 +193,7 @@ namespace ecto_linemod
       inputs.declare(&Detector::K_depth_, "K_depth", "The calibration matrix").required();
 
       outputs.declare(&Detector::pose_results_, "pose_results", "The results of object recognition");
-      outputs.declare(&Detector::model_colorValues_, "model_colorValues", "Color histograms of the recognized objects");
+      outputs.declare(&Detector::object_colorValues_, "object_colorValues", "Color histograms of the recognized objects");
     }
 
     void configure(const tendrils& params, const tendrils& inputs, const tendrils& outputs)
@@ -274,6 +269,7 @@ namespace ecto_linemod
 
     int process(const tendrils& inputs, const tendrils& outputs)
     {
+      std::cout<<"---------------------------------"<<std::endl;
       PoseResult pose_result;
       pose_results_->clear();
 
@@ -314,7 +310,6 @@ namespace ecto_linemod
           cv::cvtColor(display, display, cv::COLOR_GRAY2BGR);
           sources.push_back(display);
         }
-
         sources.push_back(depth);
       }
 
@@ -430,11 +425,12 @@ namespace ecto_linemod
         icp_dist = icpCloudToCloud(pts_real_ref_temp, pts_real_model_temp, R_real_icp, T_real_icp, px_ratio_match_inliers, 2);
 
         /* Set all array elements to zero (memset = c / fill = c++ but it calls memset) */
-        memset(colorhist_array, 0, sizeof(colorhist_array[0][0]) * 26 * 3);
+        /* memset(colorhist_array, 0, sizeof(colorhist_array[0][0]) * 26 * 3); */
+        std::fill(colorhist_array[0], colorhist_array[0] + 26 * 3, 0);
 
         /* Visualize the ROI */
         colorROI = rawColor(cv::Rect(match.x, match.y, rect_model.width, rect_model.height));
-        int counter = 0;
+        int doc_length = 0;
 
         for(int i=0; i<colorROI.cols; i++)
         {
@@ -445,7 +441,7 @@ namespace ecto_linemod
             if(depthPixel[0]!=depthPixel[0]||depthPixel[1]!=depthPixel[1]||depthPixel[2]!=depthPixel[2]||depthPixel[2]<0.2);
             else
             {
-              counter++;
+              doc_length++;
               cv::Vec3b colorPixel = colorROI.at<cv::Vec3b>(cv::Point(i,j));
               /* Color values between 0 - 255 are normalized in steps of 10
                * This values from 0 - 250 get divided by 10 to get 26 steps
@@ -458,7 +454,15 @@ namespace ecto_linemod
         }
 
         cv::Mat M= cv::Mat(26,3, CV_32F, colorhist_array);
-        model_colorValues_->push_back(cv::Mat(M));
+
+        for(unsigned int i=0; i<26; i++)
+        {
+          std::cout<<"R: "<<M.at<float>(i,0)<<" G: "<<M.at<float>(i,1)<<" B: "<<M.at<float>(i,2)<<std::endl;
+        }
+		std::cout<<std::endl;
+		std::cout<<std::endl;
+
+        object_colorValues_->push_back(cv::Mat(M));
 
         //keep the object match
         objs_.push_back(object_recognition_core::db::ObjData(pts_real_ref_temp, pts_real_model_temp, match.class_id, match.similarity, icp_dist, px_ratio_match_inliers, R_real_icp, T_crop));
@@ -568,7 +572,7 @@ namespace ecto_linemod
     /** The object recognition results */
     ecto::spore<std::vector<PoseResult> > pose_results_;
     /** The color values for each recognized object */
-    ecto::spore<std::vector<cv::Mat> > model_colorValues_;
+    ecto::spore<std::vector<cv::Mat> > object_colorValues_;
     /** The rotations, per object and per template */
     std::map<std::string, std::vector<cv::Mat> > Rs_;
     /** The translations, per object and per template */
